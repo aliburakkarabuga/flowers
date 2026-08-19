@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>seni seviyorum</title>
+<style>
+  :root{
+    --ink:#2b1a2e;
+    --gold:#ffd699;
+    --script: 'Bright', cursive;
+  }
+  @font-face{
+    font-family:'Bright';
+    src: local('Segoe Script'), local('Snell Roundhand');
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; user-select:none; }
+  html,body{
+    margin:0; padding:0; width:100%;
+    height:100%; height:100dvh;
+    overflow:hidden; overscroll-behavior:none;
+    background:#150a1f;
+    font-family: Georgia, 'Times New Roman', serif;
+    touch-action: manipulation;
+    position:fixed; inset:0;
+  }
+  #sky{
+    position:fixed; inset:0;
+    background: linear-gradient(180deg,
+      #150a1f 0%,
+      #2c1339 16%,
+      #5a1f3d 34%,
+      #a8383f 52%,
+      #dd6b3d 68%,
+      #f2a35c 82%,
+      #f7c47f 100%);
+    transition: filter 3s ease;
+  }
+  .star{
+    position:absolute; width:2px; height:2px; border-radius:50%;
+    background:#fff2d8; opacity:.85;
+    animation: twinkle 3.5s ease-in-out infinite;
+  }
+  @keyframes twinkle{
+    0%,100%{ opacity:.15; }
+    50%{ opacity:.95; }
+  }
+  #firefly-layer{ position:fixed; inset:0; pointer-events:none; }
+  .firefly{
+    position:absolute; width:4px; height:4px; border-radius:50%;
+    background:#fff3c4; box-shadow:0 0 8px 3px rgba(255,230,150,.7);
+    animation: drift linear infinite, glow 2.6s ease-in-out infinite;
+  }
+  @keyframes glow{ 0%,100%{opacity:.2;} 50%{opacity:1;} }
+  @keyframes drift{
+    from{ transform: translate(0,0); }
+    to{ transform: translate(var(--dx), var(--dy)); }
+  }
+
+  #ground{
+    position:fixed; left:0; right:0; bottom:0; height:34%;
+    overflow:visible; pointer-events:none;
+  }
+  svg.blade{ position:absolute; bottom:0; transform-origin:bottom center; }
+  svg.flower{ position:absolute; bottom:0; transform-origin:bottom center; }
+
+  #stage{
+    position:fixed; inset:0; z-index:5; cursor:pointer;
+    touch-action: manipulation;
+  }
+
+  #hint{
+    position:fixed; top:9%; left:0; right:0; text-align:center;
+    color:#ffe9c9; opacity:.85; letter-spacing:.06em;
+    font-size:15px; font-weight:400; pointer-events:none;
+    transition: opacity .8s ease;
+    text-shadow: 0 1px 6px rgba(0,0,0,.35);
+  }
+  #counter-dots{
+    position:fixed; top:15.5%; left:0; right:0; text-align:center; pointer-events:none;
+  }
+  .dot{
+    display:inline-block; width:7px; height:7px; margin:0 5px; border-radius:50%;
+    background:rgba(255,233,201,.35); transition: background .4s ease, transform .4s ease;
+  }
+  .dot.on{ background:#ffe9c9; transform:scale(1.3); }
+
+  #message{
+    position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    flex-direction:column; pointer-events:none; z-index:20;
+    opacity:0; transition: opacity 1.8s ease;
+  }
+  #message.show{ opacity:1; }
+  #message h1{
+    margin:0; font-family: 'Brush Script MT', 'Segoe Script', 'Snell Roundhand', cursive;
+    font-weight:400; font-size:min(15vw,84px); color:#fff8ec;
+    text-shadow: 0 0 22px rgba(255,200,140,.55), 0 2px 10px rgba(0,0,0,.35);
+    letter-spacing:.01em;
+  }
+
+
+  .petal{
+    position:fixed; top:-5%; pointer-events:none; z-index:15;
+    animation: fall linear forwards;
+  }
+  @keyframes fall{
+    to{ transform: translateY(115vh) rotate(360deg); opacity:0; }
+  }
+
+  .ripple{
+    position:fixed; z-index:10; pointer-events:none;
+    border-radius:50%; border:2px solid rgba(255,233,201,.9);
+    transform:translate(-50%,-50%); animation: rippleOut .6s ease-out forwards;
+  }
+  @keyframes rippleOut{
+    from{ width:0; height:0; opacity:.9; }
+    to{ width:90px; height:90px; opacity:0; }
+  }
+  .spark{
+    position:fixed; z-index:10; pointer-events:none; border-radius:50%;
+    animation: sparkOut .55s cubic-bezier(.2,.8,.4,1) forwards;
+  }
+  @keyframes sparkOut{
+    from{ transform:translate(-50%,-50%) translate(0,0) scale(1); opacity:1; }
+    to{ transform:translate(-50%,-50%) translate(var(--sx),var(--sy)) scale(0); opacity:0; }
+  }
+</style>
+</head>
+<body>
+
+<div id="sky"></div>
+<div id="firefly-layer"></div>
+<div id="ground"></div>
+<div id="hint">ekrana dokun</div>
+<div id="counter-dots">
+  <span class="dot" data-i="0"></span>
+  <span class="dot" data-i="1"></span>
+  <span class="dot" data-i="2"></span>
+</div>
+
+<div id="message">
+  <h1>seni seviyorum.</h1>
+</div>
+
+<div id="stage"></div>
+
+<script>
+const sky = document.getElementById('sky');
+const ground = document.getElementById('ground');
+const stage = document.getElementById('stage');
+const hint = document.getElementById('hint');
+const dots = document.querySelectorAll('.dot');
+const message = document.getElementById('message');
+const fireflyLayer = document.getElementById('firefly-layer');
+
+let taps = 0;
+let revealed = false;
+
+// ---- stars ----
+for(let i=0;i<70;i++){
+  const s = document.createElement('div');
+  s.className='star';
+  s.style.left = Math.random()*100+'%';
+  s.style.top = (Math.random()*55)+'%';
+  s.style.animationDelay = (Math.random()*3.5)+'s';
+  const size = Math.random()*1.6+1;
+  s.style.width = size+'px';
+  s.style.height = size+'px';
+  sky.appendChild(s);
+}
+
+// ---- fireflies ----
+for(let i=0;i<14;i++){
+  const f = document.createElement('div');
+  f.className='firefly';
+  f.style.left = Math.random()*100+'%';
+  f.style.top = (40+Math.random()*50)+'%';
+  f.style.setProperty('--dx',(Math.random()*160-80)+'px');
+  f.style.setProperty('--dy',(Math.random()*160-80)+'px');
+  f.style.animationDuration = (6+Math.random()*6)+'s, '+(2+Math.random()*2)+'s';
+  f.style.animationDelay = (Math.random()*4)+'s';
+  fireflyLayer.appendChild(f);
+}
+
+const flowerPalettes = [
+  ['#ff6fa5','#ffd166'], // pink / yellow center
+  ['#ff3f6c','#fff2c2'],
+  ['#c86bff','#fff'],
+  ['#ff9ecf','#ffe37a'],
+  ['#ffa552','#fff8e7'],
+  ['#f7567c','#ffd9a0']
+];
+
+function svgNS(tag){ return document.createElementNS('http://www.w3.org/2000/svg', tag); }
+
+function makeBlade(x){
+  const h = 60 + Math.random()*90;
+  const sway = (Math.random()*6-3);
+  const el = svgNS('svg');
+  el.classList.add('blade');
+  el.setAttribute('width', 14);
+  el.setAttribute('height', h);
+  el.setAttribute('viewBox', `0 0 14 ${h}`);
+  el.style.left = x+'px';
+  el.style.setProperty('--sway', sway+'deg');
+
+  const path = svgNS('path');
+  const curve = (Math.random()*10-5);
+  path.setAttribute('d', `M7,${h} C ${7+curve},${h*0.55} ${7-curve},${h*0.25} 7,0`);
+  path.setAttribute('stroke', `hsl(${100+Math.random()*40},55%,${30+Math.random()*18}%)`);
+  path.setAttribute('stroke-width', 3);
+  path.setAttribute('fill', 'none');
+  path.setAttribute('stroke-linecap','round');
+  el.appendChild(path);
+
+  const len = path.getTotalLength ? h*1.3 : 200;
+  path.style.strokeDasharray = len;
+  path.style.strokeDashoffset = len;
+  el.style.animation = `growBlade .9s ease-out forwards, swayBlade 3.5s ease-in-out infinite`;
+  el.style.animationDelay = '0s, .9s';
+
+  ground.appendChild(el);
+  requestAnimationFrame(()=>{
+    path.style.transition = 'stroke-dashoffset .9s ease-out';
+    path.style.strokeDashoffset = 0;
+  });
+  setTimeout(()=>{ el.style.transformOrigin='bottom center'; }, 900);
+}
+
+function makeFlower(x){
+  const size = 26 + Math.random()*22;
+  const stemH = 130 + Math.random()*140;
+  const pad = 80; // extra horizontal room for the curved stem
+  const w = size + pad;
+  const [petalColor, centerColor] = flowerPalettes[Math.floor(Math.random()*flowerPalettes.length)];
+  const el = svgNS('svg');
+  el.classList.add('flower');
+  el.setAttribute('width', w);
+  el.setAttribute('height', stemH+size);
+  el.setAttribute('viewBox', `0 0 ${w} ${stemH+size}`);
+  el.style.left = (x-w/2)+'px';
+  el.style.opacity = 0;
+  el.style.transform = 'scale(.3) translateY(10px)';
+  el.style.transition = 'opacity .5s ease, transform .7s cubic-bezier(.34,1.56,.64,1)';
+
+  const cx = w/2;
+  // stem — a pronounced S-curve so it reads as a graceful bent stalk
+  const stem = svgNS('path');
+  const curve = (Math.random()*34+22) * (Math.random()<0.5?-1:1);
+  stem.setAttribute('d', `M${cx},${stemH+size} C ${cx+curve},${stemH*0.68+size} ${cx-curve},${stemH*0.32+size} ${cx},${size*0.9}`);
+  stem.setAttribute('stroke', '#2f7d3a');
+  stem.setAttribute('stroke-width', 3.2);
+  stem.setAttribute('fill','none');
+  stem.setAttribute('stroke-linecap','round');
+  el.appendChild(stem);
+
+  // leaf
+  const leaf = svgNS('path');
+  const ly = stemH*0.55+size;
+  leaf.setAttribute('d', `M${cx},${ly} q ${16},-4 20,10 q -16,6 -20,-10 z`);
+  leaf.setAttribute('fill', '#3a8f45');
+  el.appendChild(leaf);
+
+  // petals — outer group only positions the flower head (never animated),
+  // inner group only rotates for the sway (never repositioned) so the two
+  // don't fight and knock the flower off-center.
+  const headPos = svgNS('g');
+  headPos.setAttribute('transform', `translate(${cx}, ${size*0.9})`);
+
+  const g = svgNS('g');
+  const petalCount = 6;
+  for(let i=0;i<petalCount;i++){
+    const angle = (360/petalCount)*i;
+    const p = svgNS('ellipse');
+    p.setAttribute('cx', 0);
+    p.setAttribute('cy', -size*0.42);
+    p.setAttribute('rx', size*0.26);
+    p.setAttribute('ry', size*0.42);
+    p.setAttribute('fill', petalColor);
+    p.setAttribute('transform', `rotate(${angle})`);
+    p.setAttribute('opacity','0.96');
+    g.appendChild(p);
+  }
+  const center = svgNS('circle');
+  center.setAttribute('cx',0); center.setAttribute('cy',0);
+  center.setAttribute('r', size*0.22);
+  center.setAttribute('fill', centerColor);
+  g.appendChild(center);
+  headPos.appendChild(g);
+  el.appendChild(headPos);
+
+  ground.appendChild(el);
+  requestAnimationFrame(()=>{
+    el.style.opacity = 1;
+    el.style.transform = 'scale(1) translateY(0)';
+  });
+
+  // gentle sway forever — a plain CSS animation instead of a per-flower JS
+  // Animation object, so hundreds of flowers stay cheap to keep on screen
+  g.style.transformOrigin = '0 0';
+  g.style.animation = `swayFlower ${(3.2+Math.random()*1.4).toFixed(2)}s ease-in-out infinite`;
+}
+
+function spawnPetalConfetti(){
+  const colors = ['#ff6fa5','#ffd166','#ff9ecf','#c86bff','#ffa552'];
+  for(let i=0;i<26;i++){
+    const p = document.createElement('div');
+    p.className='petal';
+    const size = 6+Math.random()*7;
+    p.style.width = size+'px';
+    p.style.height = size*0.7+'px';
+    p.style.borderRadius = '50% 0 50% 50%';
+    p.style.background = colors[Math.floor(Math.random()*colors.length)];
+    p.style.left = Math.random()*100+'%';
+    p.style.animationDuration = (3+Math.random()*3)+'s';
+    p.style.animationDelay = (Math.random()*1.2)+'s';
+    document.body.appendChild(p);
+    setTimeout(()=>p.remove(), 7000);
+  }
+}
+
+const growKeyframes = `
+@keyframes growBlade{ from{ transform: scaleY(0); } to{ transform: scaleY(1); } }
+@keyframes swayBlade{
+  0%,100%{ transform: rotate(calc(-1 * var(--sway))); }
+  50%{ transform: rotate(var(--sway)); }
+}
+@keyframes swayFlower{
+  0%,100%{ transform: rotate(-3deg); }
+  50%{ transform: rotate(3deg); }
+}
+`;
+const styleTag = document.createElement('style');
+styleTag.textContent = growKeyframes;
+document.head.appendChild(styleTag);
+
+function spawnTouchFeedback(x,y){
+  // expanding ring right where the finger lands — the "you did that" cue
+  const ring = document.createElement('div');
+  ring.className = 'ripple';
+  ring.style.left = x+'px';
+  ring.style.top = y+'px';
+  document.body.appendChild(ring);
+  setTimeout(()=>ring.remove(), 650);
+
+  // a few warm sparks flicking outward for a satisfying little pop
+  const sparkColors = ['#ffe9c9','#ffd166','#ff9ecf'];
+  for(let i=0;i<7;i++){
+    const s = document.createElement('div');
+    s.className = 'spark';
+    const size = 3+Math.random()*3;
+    s.style.width = size+'px';
+    s.style.height = size+'px';
+    s.style.left = x+'px';
+    s.style.top = y+'px';
+    s.style.background = sparkColors[Math.floor(Math.random()*sparkColors.length)];
+    const angle = Math.random()*Math.PI*2;
+    const dist = 30+Math.random()*35;
+    s.style.setProperty('--sx', Math.cos(angle)*dist+'px');
+    s.style.setProperty('--sy', Math.sin(angle)*dist+'px');
+    document.body.appendChild(s);
+    setTimeout(()=>s.remove(), 600);
+  }
+}
+
+stage.addEventListener('pointerdown', (e)=>{
+  const x = e.clientX;
+  const y = e.clientY;
+
+  spawnTouchFeedback(x,y);
+
+  // scatter a little cluster of grass around the tap point, with a flower
+  // at the tip of most of them so bare stems are the exception, not the rule
+  const stemCount = 3 + Math.floor(Math.random()*2);
+  for(let i=0;i<stemCount;i++){
+    const sx = x + (Math.random()*90-45);
+    makeBlade(sx + (Math.random()*16-8));
+    if(Math.random() < 0.75){
+      makeFlower(sx);
+    }
+  }
+
+  taps++;
+  if(taps<=3){
+    dots[taps-1] && dots[taps-1].classList.add('on');
+  }
+
+  if(taps===3 && !revealed){
+    revealed = true;
+    hint.style.opacity = 0;
+    setTimeout(()=>{
+      message.classList.add('show');
+      spawnPetalConfetti();
+      sky.style.filter = 'saturate(1.15) brightness(1.05)';
+    }, 350);
+  } else if(taps>3 && Math.random()<0.18){
+    spawnPetalConfetti();
+  }
+});
+</script>
+
+</body>
+</html>
